@@ -41,6 +41,7 @@
 #include "pin_mux.h"
 #include "fsl_pmc.h"
 #include "fsl_uart.h"
+#include "led.h"
 /*******************************************************************************
  * Definitions
  ******************************************************************************/
@@ -531,6 +532,7 @@ int main(void)
     BOARD_InitPins();
     BOARD_BootClockRUN();
     APP_InitDebugConsole();
+    init_led();
 
     /* Setup LPTMR. */
     LPTMR_GetDefaultConfig(&lptmrConfig);
@@ -549,6 +551,7 @@ int main(void)
     }
     while (1)
     {
+    	turn_on_led(green);
         curPowerState = SMC_GetPowerModeState(SMC);
 
         freq = CLOCK_GetFreq(kCLOCK_CoreSysClk);
@@ -623,7 +626,7 @@ int main(void)
             {
                 APP_SetWakeupConfig(targetPowerMode);
             }
-
+        	turn_off_led(green);
             APP_PowerModeSwitch(curPowerState, targetPowerMode);
             APP_PowerPostSwitchHook(curPowerState, targetPowerMode);
 
