@@ -22,7 +22,7 @@
 #include "fsl_debug_console.h"
 #include "led.h"
 
-void init_led(void) {
+void led_init(void) {
 	// Enable clock to Port B and Port D
 	SIM->SCGC5 |= SIM_SCGC5_PORTB_MASK | SIM_SCGC5_PORTD_MASK;
 
@@ -44,7 +44,7 @@ void init_led(void) {
 
 // Since LED anode is connected to the MCU, clearing output bit to zero will light the LED and
 // setting the output bit to one will turn off the LED.
-void turn_on_led(led_color color)
+void led_turn_on(led_color color)
 {
 	switch(color) {
 		case blue:
@@ -73,7 +73,7 @@ void turn_on_led(led_color color)
 	}
 }
 
-void turn_off_led(led_color color)
+void led_turn_off(led_color color)
 {
 	switch(color) {
 		case blue:

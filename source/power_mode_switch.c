@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2015, Freescale Semiconductor, Inc.
  * Copyright 2016-2017 NXP
+ * Copyright (C) 2023 by Krishna Suhagiya
  *
  * Redistribution and use in source and binary forms, with or without modification,
  * are permitted provided that the following conditions are met:
@@ -42,6 +43,8 @@
 #include "fsl_pmc.h"
 #include "fsl_uart.h"
 #include "led.h"
+#include "tsi.h"
+#include "timer.h"
 /*******************************************************************************
  * Definitions
  ******************************************************************************/
@@ -54,16 +57,9 @@
 
 /* Debug console RX pin: PORTA1 MUX: 2 */
 #define DEBUG_CONSOLE_RX_PORT PORTA
-#define DEBUG_CONSOLE_RX_GPIO GPIOA
 #define DEBUG_CONSOLE_RX_PIN 1
 #define DEBUG_CONSOLE_RX_PINMUX kPORT_MuxAlt2
-/* Debug console TX pin: PORTA2 MUX: 2 */
-#define DEBUG_CONSOLE_TX_PORT PORTA
-#define DEBUG_CONSOLE_TX_GPIO GPIOA
-#define DEBUG_CONSOLE_TX_PIN 2
-#define DEBUG_CONSOLE_TX_PINMUX kPORT_MuxAlt2
-#define CORE_CLK_FREQ CLOCK_GetFreq(kCLOCK_CoreSysClk)
-
+#define WAKEUP_TIMEOUT 8
 /*******************************************************************************
  * Prototypes
  ******************************************************************************/
@@ -242,38 +238,11 @@ void LPTMR0_IRQHandler(void)
     }
 }
 
-
-
-/*!
- * @brief Get input from user about wakeup timeout
- */
-static uint8_t APP_GetWakeupTimeout(void)
-{
-    uint8_t timeout;
-
-    while (1)
-    {
-        PRINTF("Select the wake up timeout in seconds.\r\n");
-        PRINTF("The allowed range is 1s ~ 9s.\r\n");
-        PRINTF("Eg. enter 5 to wake up in 5 seconds.\r\n");
-        PRINTF("\r\nWaiting for input timeout value...\r\n\r\n");
-
-        timeout = GETCHAR();
-        PRINTF("%c\r\n", timeout);
-        if ((timeout > '0') && (timeout <= '9'))
-        {
-            return timeout - '0';
-        }
-        PRINTF("Wrong value!\r\n");
-    }
-}
-
 /* Get wakeup source by user input. */
 static app_wakeup_source_t APP_GetWakeupSource(void)
 {
 
 
-    PRINTF("Will be wake up by LPTMR - Low Power Timer\r\n");
     return kAPP_WakeupSourceLptmr;
 
 
@@ -297,9 +266,8 @@ void APP_GetWakeupConfig(app_power_mode_t targetMode)
 
     if (kAPP_WakeupSourceLptmr == s_wakeupSource)
     {
-        /* Wakeup source is LPTMR, user should input wakeup timeout value. */
-        s_wakeupTimeout = APP_GetWakeupTimeout();
-        PRINTF("Will wakeup in %d seconds.\r\n", s_wakeupTimeout);
+        /* Wakeup source is LPTMR, user can specify the timeout value. */
+        s_wakeupTimeout = WAKEUP_TIMEOUT;
     }
     else
     {
@@ -514,11 +482,8 @@ void APP_PowerModeSwitch(smc_power_state_t curPowerState, app_power_mode_t targe
  */
 int main(void)
 {
-    uint32_t freq = 0;
-    uint8_t ch;
     smc_power_state_t curPowerState;
     app_power_mode_t targetPowerMode;
-    bool needSetWakeup; /* Need to set wakeup. */
     lptmr_config_t lptmrConfig;
 
     /* Power related. */
@@ -532,7 +497,11 @@ int main(void)
     BOARD_InitPins();
     BOARD_BootClockRUN();
     APP_InitDebugConsole();
-    init_led();
+    systick_init();
+    // Initialize the LEDs
+    led_init();
+    // Initialize Touch Sensing Input
+    tsi_init();
 
     /* Setup LPTMR. */
     LPTMR_GetDefaultConfig(&lptmrConfig);
@@ -551,86 +520,30 @@ int main(void)
     }
     while (1)
     {
-    	turn_on_led(green);
+    	led_turn_on(green);
         curPowerState = SMC_GetPowerModeState(SMC);
 
-        freq = CLOCK_GetFreq(kCLOCK_CoreSysClk);
+        targetPowerMode = kAPP_PowerModeLls;
 
-        PRINTF("\r\n####################  Power Mode Switch Demo ####################\n\r\n");
-        PRINTF("    Core Clock = %dHz \r\n", freq);
-
-        APP_ShowPowerMode(curPowerState);
-
-        PRINTF("\r\nSelect the desired operation \n\r\n");
-        PRINTF("Press  %c for enter: RUN      - Normal RUN mode\r\n", kAPP_PowerModeRun);
-        PRINTF("Press  %c for enter: WAIT     - Wait mode\r\n", kAPP_PowerModeWait);
-        PRINTF("Press  %c for enter: STOP     - Stop mode\r\n", kAPP_PowerModeStop);
-        PRINTF("Press  %c for enter: VLPR     - Very Low Power Run mode\r\n", kAPP_PowerModeVlpr);
-        PRINTF("Press  %c for enter: VLPW     - Very Low Power Wait mode\r\n", kAPP_PowerModeVlpw);
-        PRINTF("Press  %c for enter: VLPS     - Very Low Power Stop mode\r\n", kAPP_PowerModeVlps);
-        PRINTF("Press  %c for enter: LLS/LLS3 - Low Leakage Stop mode\r\n", kAPP_PowerModeLls);
-        PRINTF("Press  %c for enter: VLLS0    - Very Low Leakage Stop 0 mode\r\n", kAPP_PowerModeVlls0);
-        PRINTF("Press  %c for enter: VLLS1    - Very Low Leakage Stop 1 mode\r\n", kAPP_PowerModeVlls1);
-        PRINTF("Press  %c for enter: VLLS3    - Very Low Leakage Stop 3 mode\r\n", kAPP_PowerModeVlls3);
-
-        PRINTF("\r\nWaiting for power mode select..\r\n\r\n");
-
-        /* Wait for user response */
-        ch = GETCHAR();
-
-        if ((ch >= 'a') && (ch <= 'z'))
-        {
-            ch -= 'a' - 'A';
-        }
-
-        targetPowerMode = (app_power_mode_t)ch;
-
-        if ((targetPowerMode > kAPP_PowerModeMin) && (targetPowerMode < kAPP_PowerModeMax))
-        {
-            /* If could not set the target power mode, loop continue. */
-            if (!APP_CheckPowerMode(curPowerState, targetPowerMode))
-            {
-                continue;
-            }
-
-            /* If target mode is RUN/VLPR/HSRUN, don't need to set wakeup source. */
-            if ((kAPP_PowerModeRun == targetPowerMode) ||
-                (kAPP_PowerModeVlpr == targetPowerMode))
-            {
-                needSetWakeup = false;
-            }
-
-            /*
-             * If there is not wakeup pin and target power mode is VLLS0,
-             * then could only wakeup by RESET pin.
-             */
-            else if (kAPP_PowerModeVlls0 == targetPowerMode)
-            {
-                PRINTF("Press RESET pin to wakeup. \r\n");
-                needSetWakeup = false;
-            }
-
-            else
-            {
-                needSetWakeup = true;
-            }
-
-            if (needSetWakeup)
-            {
-                APP_GetWakeupConfig(targetPowerMode);
-            }
-
-            APP_PowerPreSwitchHook(curPowerState, targetPowerMode);
-
-            if (needSetWakeup)
-            {
-                APP_SetWakeupConfig(targetPowerMode);
-            }
-        	turn_off_led(green);
-            APP_PowerModeSwitch(curPowerState, targetPowerMode);
-            APP_PowerPostSwitchHook(curPowerState, targetPowerMode);
-
-            PRINTF("\r\nNext loop\r\n");
-        }
+		APP_GetWakeupConfig(targetPowerMode);
+		if(touch_event == true)
+		{
+			delay(100);
+			led_turn_off(green);
+	    	delay(100);
+	    	led_turn_on(green);
+	    	delay(100);
+	    	led_turn_off(green);
+			delay(100);
+			led_turn_on(green);
+			delay(100);
+			led_turn_off(green);
+			APP_SetWakeupConfig(targetPowerMode);
+			PRINTF("The system is going into LLS mode.\r\n");
+		    PRINTF("Will be woken up by LPTMR in %d seconds\r\n", s_wakeupTimeout);
+			APP_PowerPreSwitchHook(curPowerState, targetPowerMode);
+			APP_PowerModeSwitch(curPowerState, targetPowerMode);
+			APP_PowerPostSwitchHook(curPowerState, targetPowerMode);
+		}
     }
 }

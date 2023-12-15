@@ -42,7 +42,7 @@ typedef enum {
  * Returns:
  *   None
  */
-void init_led(void);
+void led_init(void);
 
 /*
  * This function turns the specified color LED on.
@@ -52,7 +52,7 @@ void init_led(void);
  * Returns:
  *   None
  */
-void turn_on_led(led_color color);
+void led_turn_on(led_color color);
 
 /*
  * This function turns the specified color LED off.
@@ -62,6 +62,6 @@ void turn_on_led(led_color color);
  * Returns:
  *   None
  */
-void turn_off_led(led_color color);
+void led_turn_off(led_color color);
 
 #endif /* LED_H_ */
