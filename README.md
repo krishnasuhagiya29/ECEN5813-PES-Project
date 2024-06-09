@@ -1,3 +1,5 @@
+# Low-Power Modes of FRDM KL25Z
+
 The objective of this project has been to learn about the low-power modes supported by FRDM KL25Z board by running experiments and getting findings based on that.  
 
 Following are the two major experiments covered concerning the Low Leakage Stop (LLS) mode:  
